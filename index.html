@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Chat App</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            width: 100%;
+            max-width: 900px;
+            overflow: hidden;
+        }
+        
+        header {
+            background-color: #2c3e50;
+            color: white;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            font-size: 16px;
+            opacity: 0.8;
+        }
+        
+        .main-content {
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+        }
+        
+        .setup-panel {
+            background-color: #ecf0f1;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .input-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+        
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #bdc3c7;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: background-color 0.3s;
+        }
+        
+        button:hover {
+            background-color: #2980b9;
+        }
+        
+        .chat-panel {
+            display: none;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+        
+        .participant {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            padding: 15px;
+            text-align: center;
+            position: relative;
+        }
+        
+        .participant-name {
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #2c3e50;
+        }
+        
+        .avatar {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background-color: #3498db;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 32px;
+            margin: 0 auto 15px;
+        }
+        
+        .mute-btn {
+            background-color: #e74c3c;
+            width: 100%;
+            margin-top: 10px;
+        }
+        
+        .mute-btn.muted {
+            background-color: #2ecc71;
+        }
+        
+        .mute-btn.muted::before {
+            content: "Unmute";
+        }
+        
+        .mute-btn:not(.muted)::before {
+            content: "Mute";
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .leave-btn {
+            background-color: #e74c3c;
+        }
+        
+        .status {
+            text-align: center;
+            margin: 15px 0;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        @media (max-width: 768px) {
+            .chat-panel {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Voice Chat App</h1>
+            <div class="subtitle">Connect with up to 4 people</div>
+        </header>
+        
+        <div class="main-content">
+            <div class="setup-panel" id="setupPanel">
+                <div class="input-group">
+                    <label for="nickname">Your Nickname</label>
+                    <input type="text" id="nickname" placeholder="Enter your nickname" maxlength="15">
+                </div>
+                <button id="joinBtn">Join Voice Chat</button>
+            </div>
+            
+            <div class="status" id="status">Not connected</div>
+            
+            <div class="chat-panel" id="chatPanel">
+                <!-- Participant slots will be generated here -->
+            </div>
+            
+            <div class="controls">
+                <button id="leaveBtn" class="leave-btn">Leave Call</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const setupPanel = document.getElementById('setupPanel');
+            const chatPanel = document.getElementById('chatPanel');
+            const nicknameInput = document.getElementById('nickname');
+            const joinBtn = document.getElementById('joinBtn');
+            const leaveBtn = document.getElementById('leaveBtn');
+            const status = document.getElementById('status');
+            
+            let localStream = null;
+            let isMuted = false;
+            let participants = [];
+            
+            // Generate participant slots
+            for (let i = 0; i < 4; i++) {
+                const participant = document.createElement('div');
+                participant.className = 'participant';
+                participant.innerHTML = `
+                    <div class="avatar">${i+1}</div>
+                    <div class="participant-name">Waiting to join...</div>
+                    <button class="mute-btn"></button>
+                `;
+                chatPanel.appendChild(participant);
+                participants.push({
+                    element: participant,
+                    name: participant.querySelector('.participant-name'),
+                    muteBtn: participant.querySelector('.mute-btn'),
+                    audio: null
+                });
+            }
+            
+            // Set first participant as local user
+            participants[0].name.textContent = "You (Local)";
+            participants[0].muteBtn.addEventListener('click', toggleMute);
+            
+            // Join button event
+            joinBtn.addEventListener('click', joinChat);
+            
+            // Leave button event
+            leaveBtn.addEventListener('click', leaveChat);
+            
+            function joinChat() {
+                const nickname = nicknameInput.value.trim();
+                if (!nickname) {
+                    alert("Please enter a nickname");
+                    return;
+                }
+                
+                // Update participant name
+                participants[0].name.textContent = nickname;
+                
+                // Simulate connection process
+                status.textContent = "Connecting...";
+                
+                // Simulate getting microphone access
+                setTimeout(() => {
+                    setupPanel.style.display = 'none';
+                    chatPanel.style.display = 'grid';
+                    status.textContent = "Connected (Simulation Mode)";
+                    status.style.color = "#27ae60";
+                    
+                    // Simulate other participants joining
+                    simulateParticipantsJoining(nickname);
+                }, 1500);
+            }
+            
+            function leaveChat() {
+                // Reset UI
+                setupPanel.style.display = 'block';
+                chatPanel.style.display = 'none';
+                status.textContent = "Not connected";
+                status.style.color = "#2c3e50";
+                
+                // Reset participants
+                for (let i = 1; i < 4; i++) {
+                    participants[i].name.textContent = "Waiting to join...";
+                    participants[i].muteBtn.classList.remove('muted');
+                }
+                
+                // Reset local user
+                participants[0].muteBtn.classList.remove('muted');
+                isMuted = false;
+            }
+            
+            function toggleMute() {
+                isMuted = !isMuted;
+                participants[0].muteBtn.classList.toggle('muted', isMuted);
+                
+                if (isMuted) {
+                    status.textContent = "Microphone Muted";
+                } else {
+                    status.textContent = "Microphone Active";
+                }
+            }
+            
+            function simulateParticipantsJoining(myName) {
+                // Simulate other participants joining
+                const otherNames = ["Alice", "Bob", "Charlie"];
+                
+                for (let i = 1; i < 4; i++) {
+                    setTimeout(() => {
+                        participants[i].name.textContent = otherNames[i-1];
+                        participants[i].muteBtn.addEventListener('click', function() {
+                            this.classList.toggle('muted');
+                        });
+                    }, i * 1000);
+                }
+            }
+        });
+    </script>
+</body>
+</html>
